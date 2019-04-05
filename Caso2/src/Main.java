@@ -8,16 +8,17 @@ import java.net.UnknownHostException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.security.Provider.Service;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Date;
-import java.util.Random;
+import java.util.TreeSet;
 
 import javax.xml.bind.DatatypeConverter;
 
-import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
@@ -26,6 +27,7 @@ import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.crypto.params.AsymmetricKeyParameter;
 import org.bouncycastle.crypto.util.PrivateKeyFactory;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.DefaultDigestAlgorithmIdentifierFinder;
 import org.bouncycastle.operator.DefaultSignatureAlgorithmIdentifierFinder;
@@ -34,22 +36,24 @@ import org.bouncycastle.operator.bc.BcRSAContentSignerBuilder;
 
 public class Main {
 	
-	private final static String ALGORITMO = "RSA";
+	private final static String ALGORITMO = "SHA1withRSA";
 	
 	private static String printHexBinary(byte[] certificadoEnBytes) {
 		String string = new String(certificadoEnBytes);
-		string = new String(DatatypeConverter.parseHexBinary(string ));
-		System.out.println(string);
+
+		string = new String(DatatypeConverter.printHexBinary(certificadoEnBytes));
+
 		return string;
 		
 	}
 	
 	private static X509Certificate generarCertificado(KeyPair  keyPair) throws CertificateException, OperatorCreationException, IOException {
-		AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find("RSA");
+		Security.addProvider(new BouncyCastleProvider());
+		AlgorithmIdentifier sigAlgId = new DefaultSignatureAlgorithmIdentifierFinder().find(ALGORITMO);
         AlgorithmIdentifier digAlgId = new DefaultDigestAlgorithmIdentifierFinder().find(sigAlgId);
         AsymmetricKeyParameter privateKeyAsymKeyParam = PrivateKeyFactory.createKey(keyPair.getPrivate().getEncoded());
         
-		org.bouncycastle.asn1.x500.X500Name emisor = new X500Name("localhost");
+		org.bouncycastle.asn1.x500.X500Name emisor = new X500Name("CN=Test, L=London, C=GB");
 		BigInteger serial = new BigInteger(64, new SecureRandom());
 		Date notBefore = new Date(2019, 01, 01);
 		System.out.println("Generado certificado: fecha de emicion: " + notBefore.toString());
@@ -69,8 +73,17 @@ public class Main {
 	
 	
 	public static void main(String[] args) throws IOException, NoSuchAlgorithmException, CertificateException, OperatorCreationException {
+		TreeSet<String> algorithms = new TreeSet<>();
+		for (Provider provider : Security.getProviders())
+		    for (Service service : provider.getServices())
+		        if (service.getType().equals("Signature"))
+		            algorithms.add(service.getAlgorithm());
+		for (String algorithm : algorithms)
+		    System.out.println(algorithm);
+		
+		
 		String servidorNombre = "localhost";
-		int puerto = 8081;             //puerto
+		int puerto = 8080;             //puerto
 		PrintWriter out = null;
 		BufferedReader in = null;
 		Socket server = null;
@@ -91,7 +104,7 @@ public class Main {
 			System.out.println("Server: " + in.readLine()); // Espera respuesta por parte del servidor
 			
 			System.out.println("Envia mensaje con los algoritmos que implementara, espera respuesta del servidor");
-			out.println("ALGORITMOS:AES:"+ALGORITMO+":HMACSHA1"); // se envian los protocolos
+			out.println("ALGORITMOS:AES:"+"RSA"+":HMACSHA1"); // se envian los protocolos
 
 			System.out.println("Server: " + in.readLine()); // Espera respuesta por parte del servidor
 			
@@ -99,16 +112,18 @@ public class Main {
 			
 			
 			//Generacion de claves
-			KeyPairGenerator generator = KeyPairGenerator.getInstance(ALGORITMO);
+			KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
 			generator.initialize(1024);
 			KeyPair keyPair = generator.generateKeyPair();
 			
-			
 			java.security.cert.X509Certificate certificado = generarCertificado(keyPair);
 			byte[] certificadoEnBytes = certificado.getEncoded( );
+			
 			String certificadoEnString = printHexBinary(certificadoEnBytes);
 			out.println(certificadoEnString);
-					
+			
+			System.out.println("Server: " + in.readLine()); // Espera respuesta por parte del servidor
+			
 			BufferedReader stdIn = new BufferedReader( new InputStreamReader(System.in));
 			String userInput;
 
